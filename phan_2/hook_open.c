@@ -3,10 +3,29 @@
 #include<linux/init.h>
 #include<linux/unistd.h>
 #include<linux/fs.h>
+#include <asm/pgtable_types.h>
 
 void **syscall_table_addr = NULL;
 
 asmlinkage int (*custom_syscall)(char *name);
+
+int make_rw(unsigned long address){
+    unsigned int level;
+    pte_t *pte = lookup_address(address, &level);
+    if(pte->pte &~_PAGE_RW){
+        pte->pte |=_PAGE_RW;
+    }
+    return 0;
+}
+
+
+int make_ro(unsigned long address){
+    unsigned int level;
+    pte_t *pte = lookup_address(address, &level);
+    pte->pte = pte->pte &~_PAGE_RW;
+    return 0;
+}
+
 
 asmlinkage int hook_open(const char *pathname, int flags)
 {
