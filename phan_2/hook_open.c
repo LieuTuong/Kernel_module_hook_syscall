@@ -1,9 +1,16 @@
-#include<linux/module.h> 
-#include<linux/kernel.h>
-#include<linux/init.h>
-#include<linux/unistd.h>
-#include<linux/fs.h>
+#include <asm/unistd.h>
+#include <asm/cacheflush.h>
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/syscalls.h>
 #include <asm/pgtable_types.h>
+#include <linux/highmem.h>
+#include <linux/fs.h>
+#include <linux/sched.h>
+#include <linux/moduleparam.h>
+#include <linux/unistd.h>
+#include <asm/cacheflush.h>
 
 void **syscall_table_addr = NULL;
 
@@ -47,8 +54,12 @@ static int __init entry_point(void)
 	custom_syscall = syscall_table_addr[__NR_open];
 	
 	make_rw((unsigned long)syscall_table_addr);
+	
+	printk(KERN_INFO "after make_rw\n");
 
 	syscall_table_addr[__NR_open] = hook_open;
+
+	printk(KERN_INFO "after hook_open\n");
 	
 	return 0;
 	
@@ -69,3 +80,4 @@ static int __exit exit_point(void)
 module_init(entry_point);
 module_exit(exit_point);
 
+MODULE_LICENSE("GPL");
