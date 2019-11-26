@@ -4,8 +4,11 @@
 #include<linux/unistd.h>
 #include<linux/fs.h>
 #include <asm/pgtable_types.h>
-
+#include <linux/foobar.h>
+#include <asm/uaccess.h>
+#include<linux/uaccess.h>
 void **syscall_table_addr = NULL;
+asmlinkage ssize_t (*original_write)(int fd, const void *buf, size_t cnt);
 
 int make_rw(unsigned long address){
     unsigned int level;
@@ -36,13 +39,13 @@ void fd_to_pathname(int fd,char file_name[255])
 	{
 		segment = get_fs();
 		set_fs(get_ds());
-		file_name file->f_path.dentry->d_iname;		
+		file_name = file->f_path.dentry->d_iname;		
 		set_fs(segment);
 	}
 	fput_light(file, fput_needed);
 }
 
-asmlinkage int (*custom_syscall)(char *name);
+
 
 asmlinkage ssize_t hook_write(int fd, const void *buf, size_t cnt)
 {
