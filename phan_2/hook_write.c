@@ -38,7 +38,7 @@ void fd_to_pathname(int fd,char file_name[255])
 	if (file)
 	{
 		segment = get_fs();
-		set_fs(get_ds());
+		set_fs(KERNEL_DS);
 		file_name = file->f_path.dentry->d_iname;		
 		set_fs(segment);
 	}
@@ -60,7 +60,7 @@ asmlinkage ssize_t hook_write(int fd, const void *buf, size_t cnt)
 	if (file)
 	{
 		segment = get_fs();
-		set_fs(get_ds());
+		set_fs(KERNEL_DS);
 		pathname = file->f_path.dentry->d_iname;		
 		set_fs(segment);
 	}
