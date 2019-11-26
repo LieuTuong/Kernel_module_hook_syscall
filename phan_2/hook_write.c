@@ -49,17 +49,28 @@ void fd_to_pathname(int fd,char file_name[255])
 
 asmlinkage ssize_t hook_write(int fd, const void *buf, size_t cnt)
 {
-	char pathname[255];
+	char *pathname;
+	struct file *file;
+	int fput_needed;
+	mm_segment_t segment;
 
 	printk(KERN_INFO"This is my hook_write()\n");
 
-	fd_to_pathname(fd, pathname);
+	file = fget_light(fd, &fput_needed);
+	if (file)
+	{
+		segment = get_fs();
+		set_fs(get_ds());
+		pathname = file->f_path.dentry->d_iname;		
+		set_fs(segment);
+	}
+	fput_light(file, fput_needed);
 
 	printk(KERN_INFO "Written file: %s\n", pathname);
 
-	int written_bytes = custom_syscall(fd, buf, cnt);
+	int written_bytes = original_write(fd, buf, cnt);
 
-	printk(KERN_INFO"Number of written bytes: %d\n);
+	printk(KERN_INFO"Number of written bytes: %d\n",written_bytes);
 
 	return written_bytes;
 }
@@ -70,7 +81,7 @@ static int __int init_mysyscall(void)
 	
 	syscall_table_addr = (void*)0xffffffff820001e0;
 
-	custom_syscall = syscall_table_addr[__NR_write];
+	origianl_write = syscall_table_addr[__NR_write];
 
 	make_rw((unsigned long)syscall_table_addr);
 
@@ -80,15 +91,14 @@ static int __int init_mysyscall(void)
 }
 
 
-static int __exit exit_mysyscall(void)
+static void __exit exit_mysyscall(void)
 {
 	printk(KERN_INFO "removed mysyscall hook\n");
 
-	syscall_table_addr[__NR_write] = custom_syscall;
+	syscall_table_addr[__NR_write] = original_write;
 
 	make_ro((unsigned long)syscall_table_addr);
 
-	return 0;
 }
 
 
