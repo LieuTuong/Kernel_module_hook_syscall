@@ -35,7 +35,6 @@ asmlinkage ssize_t hook_write(int fd, const void *buf, size_t cnt)
 	int  written_bytes ;
 	struct path *path;
 	
-	printk(KERN_INFO"This is my hook_write()\n");
 	
 	
 	spin_lock(&current->files->file_lock);
@@ -64,10 +63,11 @@ asmlinkage ssize_t hook_write(int fd, const void *buf, size_t cnt)
     		return PTR_ERR(pathname);
 	}
 
-
-
 	free_page((unsigned long)tmp);
-
+	
+	
+	printk(KERN_INFO"This is my hook_write()\n");
+	printk(KERN_INFO"THREAD NAME: %s\n", current->comm);
 	printk(KERN_INFO "Written file: %s\n", pathname);
 
 	written_bytes = original_write(fd, buf, cnt);
