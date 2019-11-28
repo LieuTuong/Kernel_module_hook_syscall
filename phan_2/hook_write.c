@@ -4,35 +4,29 @@
 #include<linux/unistd.h>
 #include<linux/fs.h>
 #include <asm/pgtable_types.h>
-#include <linux/foobar.h>
 #include <asm/uaccess.h>
 #include<linux/uaccess.h>
+#include<linux/fdtable.h>
+
 void **syscall_table_addr = NULL;
+
 asmlinkage ssize_t (*original_write)(int fd, const void *buf, size_t cnt);
 
-int make_rw(unsigned long address){
-    unsigned int level;
-    pte_t *pte = lookup_address(address, &level);
-    if(pte->pte &~_PAGE_RW){
-        pte->pte |=_PAGE_RW;
-    }
-    return 0;
+
+
+static void allow_writing(void)
+{
+	write_cr0(read_cr0() & (~ 0x10000));
 }
 
-int make_ro(unsigned long address){
-    unsigned int level;
-    pte_t *pte = lookup_address(address, &level);
-    pte->pte = pte->pte &~_PAGE_RW;
-    return 0;
+static void disallow_writing (void)
+{
+	write_cr0(read_cr0() | 0x10000);
 }
-
-
-
-
-
 
 asmlinkage ssize_t hook_write(int fd, const void *buf, size_t cnt)
 {
+	
 	char *tmp;
 	char *pathname;
 	struct file *file;
@@ -42,45 +36,37 @@ asmlinkage ssize_t hook_write(int fd, const void *buf, size_t cnt)
 	struct path *path;
 	
 	printk(KERN_INFO"This is my hook_write()\n");
-
-	/*file = fget_light(fd, &fput_needed);
-	if (file)
-	{
-		segment = get_fs();
-		set_fs(KERNEL_DS);
-		pathname = file->f_path.dentry->d_iname;		
-		set_fs(segment);
-	}
-	fput_light(file, fput_needed);*/
+	
+	
 	spin_lock(&current->files->file_lock);
-file = fcheck_files(current->files, fd);
-if (!file) {
-    spin_unlock(&current->files->file_lock);
-    return -ENOENT;
-}
+	file = fcheck_files(current->files, fd);
+	if (!file) {
+    		spin_unlock(&current->files->file_lock);
+   		 return -ENOENT;
+	}
 
-path = &file->f_path;
-path_get(path);
-spin_unlock(&current->files->file_lock);
+	path = &file->f_path;
+	path_get(path);
+	spin_unlock(&current->files->file_lock);
 
-tmp = (char *)__get_free_page(GFP_KERNEL);
+	tmp = (char *)__get_free_page(GFP_KERNEL);
 
-if (!tmp) {
-    path_put(path);
-    return -ENOMEM;
-}
+	if (!tmp) {
+   		 path_put(path);
+   	 return -ENOMEM;
+	}
 
-pathname = d_path(path, tmp, PAGE_SIZE);
-path_put(path);
+	pathname = d_path(path, tmp, PAGE_SIZE);
+	path_put(path);
 
-if (IS_ERR(pathname)) {
-    free_page((unsigned long)tmp);
-    return PTR_ERR(pathname);
-}
+	if (IS_ERR(pathname)) {
+    		free_page((unsigned long)tmp);
+    		return PTR_ERR(pathname);
+	}
 
-/* do something here with pathname */
 
-free_page((unsigned long)tmp);
+
+	free_page((unsigned long)tmp);
 
 	printk(KERN_INFO "Written file: %s\n", pathname);
 
@@ -95,13 +81,15 @@ static int __init init_mysyscall(void)
 {
 	printk(KERN_INFO "loaded mysyscall hook\n");
 	
-	syscall_table_addr = (void*)0xffffffff820001e0;
+	syscall_table_addr = (void*)0xffffffff81a001c0;
 
-	origianl_write = syscall_table_addr[__NR_write];
+	original_write = syscall_table_addr[__NR_write];
 
-	make_rw((unsigned long)syscall_table_addr);
+	allow_writing();
 
 	syscall_table_addr[__NR_write] = hook_write;
+
+	disallow_writing();
 
 	return 0;
 }
@@ -110,13 +98,16 @@ static int __init init_mysyscall(void)
 static void __exit exit_mysyscall(void)
 {
 	printk(KERN_INFO "removed mysyscall hook\n");
+	
+	allow_writing();
 
 	syscall_table_addr[__NR_write] = original_write;
 
-	make_ro((unsigned long)syscall_table_addr);
+	disallow_writing();
 
 }
 
 
 module_init(init_mysyscall);
 module_exit(exit_mysyscall);
+
