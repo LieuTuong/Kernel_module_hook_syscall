@@ -1,83 +1,59 @@
-#include <asm/unistd.h>
-#include <asm/cacheflush.h>
-#include <linux/init.h>
-#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/syscalls.h>
-#include <asm/pgtable_types.h>
-#include <linux/highmem.h>
-#include <linux/fs.h>
-#include <linux/sched.h>
-#include <linux/moduleparam.h>
-#include <linux/unistd.h>
-#include <asm/cacheflush.h>
+#include<linux/kernel.h>
+#include<linux/module.h>
+#include<linux/moduleparam.h>
+#include<linux/unistd.h>
+#include<asm/cacheflush.h>
+#include<linux/init.h>
+#include<linux/fs.h>
+#include<asm/paravirt.h>
+#include<linux/sched.h>
+#include<linux/highmem.h>
+#include<linux/syscalls.h>
 
-void **syscall_table_addr = NULL;
+void **sys_call_table;
 
-asmlinkage int (*custom_syscall)(char *name);
+asmlinkage int (*original_call)(const char*,int);
 
-int make_rw(unsigned long address){
-    unsigned int level;
-    pte_t *pte = lookup_address(address, &level);
-    if(pte->pte &~_PAGE_RW){
-        pte->pte |=_PAGE_RW;
-    }
-    return 0;
-}
-
-
-int make_ro(unsigned long address){
-    unsigned int level;
-    pte_t *pte = lookup_address(address, &level);
-    pte->pte = pte->pte &~_PAGE_RW;
-    return 0;
-}
-
-
-asmlinkage int hook_open(const char *pathname, int flags)
+asmlinkage int hook_open(const char* file, int flag)
 {
-	printk(KERN_INFO "This is my hook_open()\n");
-	
-	printk(KERN_INFO"Opening file: %s\n",pathname);
-	
-	return custom_syscall(const char *pathname, int flags);
+	printk(KERN_INFO"This is my hook_open\n");
+	printk(KERN_INFO"THREAD NAME: %s\n", current->comm);
+	printk(KERN_INFO"file open: %s\n", file);
+	return original_call(file, flag);
 }
 
-
-
-static int __init entry_point(void)
+static void allow_writing(void)
 {
-	printk(KERN_INFO "loaded mysyscall hook\n");
-
-	syscall_table_addr =(void*)0xffffffff820001e0;
-	
-	custom_syscall = syscall_table_addr[__NR_open];
-	
-	make_rw((unsigned long)syscall_table_addr);
-	
-	printk(KERN_INFO "after make_rw\n");
-
-	syscall_table_addr[__NR_open] = hook_open;
-
-	printk(KERN_INFO "after hook_open\n");
-	
-	return 0;
-	
+	write_cr0(read_cr0() & (~ 0x10000));
 }
 
-
-
-static int __exit exit_point(void)
+static void disallow_writing (void)
 {
-	printk(KERN_INFO " removed mysyscall hook\n");
-	syscall_table_addr[__NR_open] = custom_syscall;
+	write_cr0(read_cr0() | 0x10000);
+}
 
-	make_ro((unsigned long)syscall_table_addr);
-
+static int __init init_hook(void)
+{
+	
+	sys_call_table = (void*)0xffffffff81a001c0;
+	original_call = sys_call_table[__NR_open];
+	allow_writing();
+	sys_call_table[__NR_open] = hook_open;
+	disallow_writing();
+	printk(KERN_INFO" LOADED MY HOOK\n");
 	return 0;
 }
 
-module_init(entry_point);
-module_exit(exit_point);
 
-MODULE_LICENSE("GPL");
+static void __exit exit_hook(void)
+{
+	
+	allow_writing();
+	sys_call_table[__NR_open] = original_call;
+	disallow_writing();
+	printk(KERN_INFO"REMOVED MY HOOK\n");
+}
+
+
+module_init(init_hook);
+module_exit(exit_hook);
